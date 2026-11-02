@@ -155,7 +155,14 @@ class BsonTest extends utest.Test {
 		// build links is not visible to Haxe code, so ask the runtime.
 		var small:Int64 = Int64.ofInt(5);
 		var boxed:Dynamic = small;
+		#if (java || jvm)
+		// A JVM Long also passes Haxe's numeric Int predicate when its value
+		// fits 32 bits. It is still an Int64 and must keep BSON's 0x12 tag.
+		Assert.isTrue(Int64.isInt64(boxed));
+		Assert.equals(0x12, Bson.encode({n: small}).get(4));
+		#else
 		Assert.equals(Std.isOfType(boxed, Int) ? 0x10 : 0x12, Bson.encode({n: small}).get(4));
+		#end
 
 		// Wrapped, it is an int64 everywhere, and decoding with wrapInt64 keeps
 		// it one through a round trip.
