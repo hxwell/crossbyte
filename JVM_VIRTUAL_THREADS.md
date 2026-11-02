@@ -2,8 +2,10 @@
 
 This fork adds opt-in Java 21 virtual threads for child runtimes created with
 `CrossByte.make`, including an HTTP server's listener and connection I/O runtime.
-It is based on upstream commit `acc6de8994e0292ae48706017a2eafa4acbaedbf` so a
+It is based on upstream commit `45628a59667de98649c23cbcd391513a1ef714c4` so a
 benchmark can compare the same Crossbyte implementation with one thread change.
+The current base includes upstream connection-handoff backpressure: a full child
+runtime queue parks the listener rather than immediately closing new arrivals.
 
 ```sh
 haxe -lib crossbyte -lib hxjava -D crossbyte_jvm_virtual_threads \

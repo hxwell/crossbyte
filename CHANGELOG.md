@@ -4,6 +4,41 @@ All notable changes to CrossByte will be documented in this file.
 
 ## 1.0.1 - Unreleased
 
+### Added
+
+#### HTTP
+
+- A request can be answered from a thread of the application's own, as
+  a framework that runs its handlers on a worker pool answers them:
+  `respond`, `respondBytes`, `beginResponse` and its stream's `write`,
+  `writeText` and `end` may be called from any thread. Called from
+  another, each is handed to the connection's runtime and returns at
+  once, and what is handed over together goes out in one write as the
+  runtime's pass ends. A stream written from another thread answers
+  `write` from what it has handed over and not yet sent, and calls
+  `onDrain` on the connection's runtime. A call that reaches the runtime
+  after its request was answered does nothing, rather than answering the
+  next request pipelined behind it. On two cores at 1,000 connections,
+  two workers answering with `respond` served about 130,000 requests a
+  second, where workers answering through three blocking round trips to
+  the runtime (head, body, end) served about 7,000, with 0.4 thread
+  switches a request against 4.5. See docs/runtime.md.
+- `HTTPRequestHandler.abort()` gives up on a response, from any thread:
+  the connection closes under HTTP/1.1, the stream is reset under HTTP/2.
+- `HTTPRequestHandler.getAllHeaders()` and `httpVersion`: every request
+  header by lower-case name, and the version the request came in.
+- A response that says `Cache-Control: no-transform` is not compressed,
+  as Express's `compression` leaves one: how an application says, for
+  one response, that its body is to go as given.
+
+#### Platform
+
+- `-D crossbyte_pgo=generate` and `-D crossbyte_pgo=use` build a native
+  program with profile-guided optimisation, which hxcpp has no option
+  for: built instrumented, run on its work, and built again from what
+  the run counted. It turns on link-time optimisation as well, and works
+  with MSVC, GCC and Clang. See docs/targets.md.
+
 ### Changed
 
 Entries marked "(Upgrading)" can need code changed; the Upgrading section
@@ -19,8 +54,47 @@ says how.
   Failures after startup are contained as before. `CrossByte.exit(code)`
   takes the program's exit code, and every runtime keeps it as
   `exitCode`. (Upgrading)
+- An HXSF object makes instances only of the classes and enums the
+  program allows with `ByteArray.allowObjectClass` and
+  `ByteArray.allowObjectEnum`, and one naming any other is refused with
+  an `IOError`. It made an instance of any class it named, without the
+  class's constructor and with the fields the sender chose, so a peer's
+  object, read through a socket, could make one of a class whose methods
+  trust what its constructor checked. This holds wherever HXSF is read:
+  `readObject`, a socket's too, `FileStream`, `SharedObject` and
+  `SharedChannel`. Arrays, structures, strings, numbers, `Date`, `Bytes`,
+  `List` and maps need nothing allowed, and AMF and JSON make no class
+  instances. (Upgrading)
 
 ### Fixed
+
+#### HTTP
+
+- A response given `Connection: close` closes the connection after it,
+  as Go's and Node's servers do. Over HTTP/1.1 the header went out beside
+  the server's own `Connection: keep-alive`, and the connection stayed
+  open.
+- A client still sending a request the server has answered already (an
+  upload refused `413` on its `Content-Length`, or requests pipelined
+  behind one the connection was closed after) reads the answer. The
+  connection was closed over the bytes still arriving, which resets it,
+  and a reset throws away what the client has not read: curl or a browser
+  reported a reset, not the `413`. Now the server ends its side (a TLS
+  connection leaves that to its client) and reads and drops what arrives
+  until the client closes, or five seconds pass, as Go's `net/http` and
+  nginx's lingering close do.
+
+#### TCP
+
+- A server spread over `runtimes` serves a burst of connections larger
+  than its runtimes can take up at once. Once every runtime had 256
+  connections handed to it and not yet taken up, the server accepted
+  each further connection and closed it at once, counted in
+  `refusedConnections`: of 1,000 HTTP clients connecting together to a
+  server with `runtimeCount = 1`, hundreds read an end of stream. Now it
+  takes nothing more from the listen queue until a runtime catches up,
+  so the rest wait in the kernel's queue, as at `maxPendingHandshakes`,
+  and are served late rather than refused.
 
 #### RPC
 
@@ -72,6 +146,13 @@ says how.
   `FileStream`: as on Node, the file can be moved and deleted, and a
   directory with one inside it is then refused as not empty until it is
   closed. `FileTest` runs in the PHP lane.
+- On the interpreter and PHP, `haxe.Timer.stamp()`, which everything in
+  CrossByte waits and measures by, reads a monotonic clock: libuv's on
+  the interpreter, `hrtime` on PHP. It read the time of day there, so
+  setting the clock, or a virtual machine resyncing it, moved every
+  deadline with it: a step forwards made timeouts fall due at once.
+  HashLink and Neko have no monotonic clock, and `docs/targets.md` says
+  so.
 
 ### Upgrading from 1.0.0
 
@@ -81,6 +162,11 @@ says how.
   and an application's process with it, where it was logged and the
   runtime ran on. To carry on past a failure in startup, catch it inside
   the listener.
+- A program that sends or stores instances of its own classes or enums as
+  HXSF objects allows each as it starts, before reading any:
+  `ByteArray.allowObjectClass(Point)`, `ByteArray.allowObjectEnum(Shape)`.
+  Allow only classes that are plain data, since an instance is made
+  without its constructor.
 
 #### Platform
 
