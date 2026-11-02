@@ -1,0 +1,5 @@
+-lib crossbyte
+-lib hxjava
+-cp tests
+-main JvmVirtualRuntimeMain
+--jvm export/jvm/CrossByteVirtualRuntime.jar

@@ -1,5 +1,9 @@
 package crossbyte.core;
 
+#if (crossbyte_jvm_virtual_threads && !jvm)
+#error "crossbyte_jvm_virtual_threads requires the JVM target and Java 21 or newer."
+#end
+
 #if cpp
 import cpp.AtomicInt;
 import crossbyte.utils.ThreadPriority;
@@ -247,6 +251,8 @@ final class CrossByte extends EventDispatcher {
 		if (instance.__getRunning()) {
 			#if js
 			instance.__startLoopLater();
+			#elseif (jvm && !macro && crossbyte_jvm_virtual_threads)
+			crossbyte.core._internal.jvm.VirtualRuntimeThread.add(instance.__runEventLoop);
 			#else
 			EntryPoint.addThread(instance.__runEventLoop);
 			#end

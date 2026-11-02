@@ -1,5 +1,9 @@
 # CrossByte
 
+This HxWell fork adds opt-in JVM virtual runtime threads. See
+[JVM virtual runtime threads](JVM_VIRTUAL_THREADS.md) for Java 21 setup, lifecycle
+semantics and the separate benchmark case. The upstream APIs remain available.
+
 <p align="center">
   <img src="crossbyte.png" alt="CrossByte logo" width="160" />
 </p>
